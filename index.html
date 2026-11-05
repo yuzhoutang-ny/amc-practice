@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>AMC Practice</title>
+<style>
+:root{--bg:#f4f7fc;--s:#fff;--i:#17223d;--m:#566280;--l:#d5ddeb;--so:#e8eefb;--a:#1f4fd6;--oa:#fff;--g:#17744a;--gb:#e2f4ea;--w:#99540a;--wb:#fcefdc;--b:#ad2a1f;--bb:#fbe7e4}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1525;--s:#172039;--i:#e8edf8;--m:#a4afc6;--l:#2d3a59;--so:#1f2b4a;--a:#92b2ff;--oa:#0e1525;--g:#6bd6a6;--gb:#143427;--w:#f1b768;--wb:#3a2a12;--b:#ff9a90;--bb:#3e1c1a;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--i);font:400 17px/1.45 -apple-system,"Segoe UI",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+.w{max-width:720px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));display:grid;gap:16px}
+h1{font-size:26px;margin:0}h2{font-size:18px;margin:0}p{margin:0}.m{color:var(--m)}.sm{font-size:15px}
+button,a.btn{font:inherit;color:var(--i);background:var(--s);border:1px solid var(--l);border-radius:8px;min-height:48px;padding:10px 16px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;touch-action:manipulation}
+button[aria-pressed=true]{background:var(--so);border:2px solid var(--a);font-weight:600}.pri{background:var(--a)!important;border-color:var(--a)!important;color:var(--oa)!important;font-weight:600}
+button:disabled{opacity:.5}.card{background:var(--s);border:1px solid var(--l);border-radius:10px;padding:14px;display:grid;gap:12px;min-width:0}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}.t{font-weight:700}.pill{font-size:14px;padding:2px 10px;border-radius:12px;background:var(--so);color:var(--m);white-space:nowrap}.pill.g{background:var(--gb);color:var(--g)}.pill.w{background:var(--wb);color:var(--w)}.pill.b{background:var(--bb);color:var(--b)}
+.opts{display:flex;flex-wrap:wrap;gap:8px}.lab{font-size:15px;font-weight:600;color:var(--m)}.f{display:grid;gap:6px}.timer{font-variant-numeric:tabular-nums;color:var(--m);font-size:15px;align-self:center}.note{padding:10px 12px;border-radius:8px;background:var(--wb);color:var(--w)}.note.b{background:var(--bb);color:var(--b)}
+.i{display:grid;gap:6px;justify-items:start}
+</style>
+</head>
+<body>
+<div class="w"><h1 id="title">AMC Practice</h1><div id="app"><p class="m">Loading your problems…</p></div></div>
+<script>
+(function(){
+"use strict";
+/* Problems stay on LIVE. This page only keeps links and results. No Google sign-in: credentials are never sent. */
+var API="https://script.google.com/macros/s/AKfycbzE2ZNVY0S5LD1EXSEk63LFtIK_E1aXq6expD73ZOGdIQ-ADFBCBX3TGQCXBK83yyRb/exec";
+var RES={right:"Correct",wrong:"Wrong",giveup:"Could not solve"},HINT={none:"No hint",small:"Small hint",big:"Big hint",solution:"Saw the solution"};
+var WHY=["Calculation error","Misread the problem","No idea where to start","Did not know the method","Ran out of time","Careless mistake"];
+var q=new URLSearchParams(location.search),KEY=(q.get("student")||"").toLowerCase(),EXPLAIN=q.get("explain");
+var S={student:null,data:null,open:null,drafts:{},timers:{},saving:false,err:""},TK="amc.timers."+KEY;
+function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v));}catch(e){return null;}}
+S.timers=ls(TK)||{};
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function https(u){u=String(u||"");return /^https:\/\//.test(u)?u:"";}
+function fmt(sec){sec=Math.max(0,Math.round(sec));var m=Math.floor(sec/60),s=sec%60;return m+":"+(s<10?"0":"")+s;}
+var el=document.getElementById("app"),title=document.getElementById("title");
+function load(){
+  if(!KEY){S.data={};render();return;}
+  fetch(API+"?api=1&student="+encodeURIComponent(KEY),{credentials:"omit",cache:"no-store"}).then(function(r){if(!r.ok)throw new Error("http");return r.json();}).then(function(d){
+    S.data=d;S.student=d.student||null;S.err="";
+    if(S.student&&!EXPLAIN){title.textContent=S.student.split(" ")[0]+"’s AMC Practice";document.title=title.textContent;}
+    render();
+  }).catch(function(){S.err="Your problems could not load. Check the internet connection and refresh this page.";render();});
+}
+function myResults(id){return (S.data.results||[]).filter(function(r){return r.student===S.student&&r.problemId===id;}).sort(function(a,b){return String(a.at).localeCompare(String(b.at));});}
+function status(id){var h=myResults(id);if(!h.length)return{t:"Not done",c:""};var l=h[h.length-1];if(l.result==="right"&&l.hint==="none")return{t:"Correct",c:"g"};if(l.result==="right")return{t:"Correct with help",c:"w"};return{t:RES[l.result]||"Done",c:"b"};}
+function findProblem(id){var hit=null;(S.data.assignments||[]).forEach(function(a){(a.problems||[]).forEach(function(p){if(p.id===id)hit=p;});});return hit;}
+function link(url,label,note){return '<div class="i"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(url)+'">'+esc(label)+'</a><p class="m sm">'+esc(note)+'</p></div>';}
+function viewExplain(){
+  var p=findProblem(EXPLAIN);
+  if(!p){title.textContent="Problem not found";return '<div class="card"><p class="m">Go back to your practice page and open it from there.</p></div>';}
+  title.textContent=p.title;document.title=p.title;
+  if(!myResults(p.id).length)return '<div class="card"><p class="m">Finish this problem and save your result first. Then the explanation opens here.</p></div>';
+  var live=https(String(p.url).split("?")[0]),aops=https(p.aops),video=https(p.video);
+  return '<div style="display:grid;gap:16px"><section class="card"><h2>Problem and written explanation</h2>'+
+    (live?link(live,"Open on LIVE","LIVE by Po-Shen Loh: the problem, hints and written solution."):"")+
+    (aops?link(aops,"Open on AoPS","AoPS Wiki: the problem and more written solutions."):"")+
+    '</section><section class="card"><h2>Video</h2>'+
+    (video?link(video,"Watch video",p.videoNote||"Video about this problem."):'<p class="m sm">No video found for this problem yet.</p>')+'</section></div>';
+}
+function render(){
+  var h="";if(S.err)h+='<div class="note b">'+esc(S.err)+'</div>';
+  if(!S.data){el.innerHTML=h||'<p class="m">Loading your problems…</p>';return;}
+  if(!S.student){el.innerHTML=h+'<div class="card"><p>Please open your own practice link.</p></div>';return;}
+  if(EXPLAIN){el.innerHTML=h+viewExplain();return;}
+  var sets=(S.data.assignments||[]).filter(function(a){return a.student===S.student;});
+  if(!sets.length){el.innerHTML=h+'<div class="card"><p>No problems for you right now.</p></div>';return;}
+  h+='<div style="display:grid;gap:16px">'+sets.map(function(a){return '<section style="display:grid;gap:10px"><h2>'+esc(a.title||"Problems")+'</h2>'+a.problems.map(function(p){return row(a,p);}).join("")+'</section>';}).join("")+'</div>';
+  el.innerHTML=h;tick();
+}
+function row(a,p){
+  var st=status(p.id),open=S.open===p.id,done=myResults(p.id).length>0;
+  var h='<article class="card"><div class="head"><div class="t">'+esc(p.title)+'</div><span class="pill '+st.c+'">'+esc(st.t)+'</span></div><div class="opts"><a class="btn pri" target="_blank" rel="noopener" data-a="go" data-id="'+esc(p.id)+'" href="'+esc(p.url)+'">'+(done?"Try again":"Start problem")+'</a>'+(done?'<a class="btn" target="_blank" rel="noopener" href="'+esc("?student="+encodeURIComponent(KEY)+"&explain="+encodeURIComponent(p.id))+'">Solution &amp; video</a>':"")+(S.timers[p.id]?'<button data-a="open" data-id="'+esc(p.id)+'">'+(open?"Close":"I finished")+'</button><span class="timer" data-t="'+esc(p.id)+'"></span>':"")+'</div>';
+  if(open){var d=S.drafts[p.id]||(S.drafts[p.id]={result:null,hint:"none"});
+    h+='<div class="f"><span class="lab">How did it go?</span><div class="opts">'+Object.keys(RES).map(function(k){return '<button data-a="res" data-id="'+esc(p.id)+'" data-k="'+k+'" aria-pressed="'+(d.result===k)+'">'+RES[k]+'</button>';}).join("")+'</div></div>'+
+    '<div class="f"><span class="lab">Most help you used</span><div class="opts">'+Object.keys(HINT).map(function(k){return '<button data-a="hint" data-id="'+esc(p.id)+'" data-k="'+k+'" aria-pressed="'+(d.hint===k)+'">'+HINT[k]+'</button>';}).join("")+'</div></div>'+
+    (d.result&&d.result!=="right"?'<div class="f"><span class="lab">What went wrong? (optional)</span><div class="opts">'+WHY.map(function(w){return '<button data-a="why" data-id="'+esc(p.id)+'" data-k="'+esc(w)+'" aria-pressed="'+(d.reason===w)+'">'+esc(w)+'</button>';}).join("")+'</div></div>':"")+
+    '<div><button class="pri" data-a="save" data-id="'+esc(p.id)+'" data-r="'+esc(a.requestId)+'"'+((d.result&&!S.saving)?"":" disabled")+'>'+(S.saving?"Saving…":"Done")+'</button></div>';}
+  return h+'</article>';
+}
+function tick(){var n=document.querySelectorAll("[data-t]");for(var i=0;i<n.length;i++){var st=S.timers[n[i].getAttribute("data-t")];if(st)n[i].textContent=fmt((Date.now()-st)/1000);}}
+setInterval(tick,1000);
+function uid(){return "a"+Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+function save(rec){
+  /* text/plain keeps this a simple request. The attempt id stops a retry from saving twice. */
+  return fetch(API,{method:"POST",credentials:"omit",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(rec)}).then(function(r){return r.json();}).then(function(j){if(!j.ok)throw new Error(j.error||"save");});
+}
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("[data-a]");if(!t)return;
+  var a=t.getAttribute("data-a"),id=t.getAttribute("data-id"),k=t.getAttribute("data-k");
+  if(a==="go"){S.timers[id]=Date.now();ls(TK,S.timers);S.open=id;setTimeout(render,0);return;}
+  if(a==="open"){S.open=S.open===id?null:id;render();return;}
+  if(a==="res"){S.drafts[id].result=k;if(k==="right")S.drafts[id].reason="";render();return;}
+  if(a==="why"){var dw=S.drafts[id];dw.reason=dw.reason===k?"":k;render();return;}
+  if(a==="hint"){S.drafts[id].hint=k;render();return;}
+  if(a==="save"){
+    var d=S.drafts[id];if(!d||!d.result||S.saving)return;S.saving=true;S.err="";render();
+    var rec={attemptId:d.attemptId||(d.attemptId=uid()),student:S.student,problemId:id,requestId:t.getAttribute("data-r"),result:d.result,hint:d.hint,reason:d.reason||"",seconds:S.timers[id]?Math.round((Date.now()-S.timers[id])/1000):null};
+    save(rec).then(function(){S.saving=false;delete S.timers[id];ls(TK,S.timers);delete S.drafts[id];S.open=null;load();}).catch(function(){S.saving=false;S.err="That did not save. Tap Done again.";render();});
+  }
+});
+load();
+})();
+</script>
+</body>
+</html>
